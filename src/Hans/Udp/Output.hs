@@ -7,6 +7,7 @@ module Hans.Udp.Output (
     -- ** Fast-path Output
     responder,
     queueUdp,
+    renderUdpPacket
   ) where
 
 import Hans.Addr.Types (Addr)

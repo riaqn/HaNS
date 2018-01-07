@@ -4,4 +4,6 @@ cabal.sandbox.config
 result
 *.o
 results.xml
+.stack-work
+stack.yaml
 

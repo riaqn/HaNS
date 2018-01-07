@@ -35,7 +35,7 @@ import           Numeric (readDec)
 -- IP4 Addresses ---------------------------------------------------------------
 
 newtype IP4 = IP4 Word32
-              deriving (Eq,Ord,Show,Read,Hashable,Checksum,Typeable,Generic)
+              deriving (Eq,Ord,Hashable,Checksum,Typeable,Generic)
 
 instance Serialize IP4 where
   get = getIP4
@@ -67,6 +67,9 @@ unpackIP4 (IP4 w) = ( view (byte 3) w
                     )
 {-# INLINE unpackIP4 #-}
 
+instance Show IP4 where
+  showsPrec _ = showIP4
+  
 showIP4 :: IP4 -> ShowS
 showIP4 ip4 =
   let (a,b,c,d) = unpackIP4 ip4
@@ -76,6 +79,9 @@ showIP4 ip4 =
       shows d
 {-# INLINE showIP4 #-}
 
+instance Read IP4 where
+  readsPrec _ = readIP4
+  
 readIP4 :: ReadS IP4
 readIP4 str =
   do (a,'.':rest1) <- readDec str
@@ -326,7 +332,7 @@ putIP4Header IP4Header { .. } pktlen = do
 
   putWord8    ip4TimeToLive
   putWord8    ip4Protocol
-  putWord16be 0 -- checksum
+  putWord16be ip4Checksum -- checksum
 
   putIP4 ip4SourceAddr
   putIP4 ip4DestAddr

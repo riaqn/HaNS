@@ -18,6 +18,7 @@ module Hans.Tcp.Output (
     queueWithTcb,
     queueAck,
     responder,
+    renderTcpPacket
 
     -- $notes
   ) where

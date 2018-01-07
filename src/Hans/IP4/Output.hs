@@ -10,6 +10,7 @@ module Hans.IP4.Output (
     -- * ICMP4 Messages
     queueIcmp4,
     portUnreachable,
+    renderIP4Packet
   ) where
 
 import Hans.Checksum (computeChecksum)

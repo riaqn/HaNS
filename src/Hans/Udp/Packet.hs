@@ -50,4 +50,4 @@ putUdpHeader UdpHeader { .. } bodyLen =
   do putUdpPort  udpSourcePort
      putUdpPort  udpDestPort
      putWord16be (fromIntegral (bodyLen + udpHeaderSize))
-     putWord16be 0
+     putWord16be udpChecksum

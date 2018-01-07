@@ -1,3 +1,6 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -17,9 +20,13 @@ module Hans.Tcp.Packet (
     withinWindow,
     fromTcpSeqNum,
 
+    TcpFlags(..),
     -- ** Header Flags
     tcpNs, tcpCwr, tcpEce, tcpUrg, tcpAck, tcpPsh, tcpRst, tcpSyn,
-    tcpFin,
+    tcpFin, emptyTcpFlags,
+    tcpNs', tcpCwr', tcpEce', tcpUrg', tcpAck', tcpPsh', tcpRst', tcpSyn',
+    tcpFin',
+    
 
     -- ** Serialization
     getTcpHeader, putTcpHeader,
@@ -44,11 +51,11 @@ module Hans.Tcp.Packet (
 import Hans.Lens
 
 import           Control.Monad (replicateM,replicateM_,unless)
-import           Data.Bits ((.|.),(.&.),shiftL,shiftR)
+import           Data.Bits ((.|.),(.&.),shiftL,shiftR, Bits)
 import qualified Data.ByteString as S
 import qualified Data.Foldable as F
 import           Data.Int (Int32)
-import           Data.List (find)
+import           Data.List (find, intercalate)
 import           Data.Serialize.Get
                      (Get,getWord8,getWord16be,getWord32be,label,isolate
                      ,getBytes,remaining,skip)
@@ -133,45 +140,94 @@ getTcpAckNum  = getTcpSeqNum
 --   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --   |                             data                              |
 --   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+newtype TcpFlags = TcpFlags { unTcpFlags :: Word16}
+  deriving (Eq, Bits)
+
+instance Show TcpFlags where
+  show f = intercalate "," $ map (\(_, b) -> b) $ filter (\(a, _) -> view (unTcpFlag a) f) tcpFlagsNames
+
+
 data TcpHeader = TcpHeader { tcpSourcePort    :: !TcpPort
                            , tcpDestPort      :: !TcpPort
                            , tcpSeqNum        :: !TcpSeqNum
                            , tcpAckNum        :: !TcpAckNum
-                           , tcpFlags_        :: !Word16
+                           , tcpFlags_        :: !TcpFlags
                            , tcpWindow        :: !Word16
                            , tcpChecksum      :: !Word16
                            , tcpUrgentPointer :: !Word16
                            , tcpOptions_      :: [TcpOption]
                            } deriving (Eq,Show)
 
+
+emptyTcpFlags :: TcpFlags
+emptyTcpFlags = TcpFlags 0
+
 emptyTcpHeader :: TcpHeader
 emptyTcpHeader  = TcpHeader { tcpSourcePort    = 0
                             , tcpDestPort      = 0
                             , tcpSeqNum        = 0
                             , tcpAckNum        = 0
-                            , tcpFlags_        = 0
+                            , tcpFlags_        = emptyTcpFlags -- includes offset
                             , tcpWindow        = 0
                             , tcpChecksum      = 0
                             , tcpUrgentPointer = 0
                             , tcpOptions_      = []
                             }
 
-tcpFlags :: Lens' TcpHeader Word16
+tcpFlags :: Lens' TcpHeader TcpFlags
 tcpFlags f hdr =
   fmap (\flags' -> hdr { tcpFlags_ = flags' }) (f (tcpFlags_ hdr))
 {-# INLINE tcpFlags #-}
 
+newtype TcpFlag = TcpFlag {unTcpFlag :: Lens' TcpFlags Bool}
+
+tcpFlagsNames :: [(TcpFlag, String)]
+tcpFlagsNames = [ (TcpFlag tcpNs', "NS")
+                , (TcpFlag tcpCwr', "CWR")
+                , (TcpFlag tcpEce', "ECE")
+                , (TcpFlag tcpUrg', "URG")
+                , (TcpFlag tcpAck', "ACK")
+                , (TcpFlag tcpPsh', "PSH")
+                , (TcpFlag tcpRst', "RST")
+                , (TcpFlag tcpSyn', "SYN")
+                , (TcpFlag tcpFin', "FIN")
+              ]
+
+  
+
+tcpNs', tcpCwr', tcpEce', tcpUrg', tcpAck', tcpPsh', tcpRst', tcpSyn',
+  tcpFin' :: Lens' TcpFlags Bool
+tcpNs'  = bit 8
+tcpCwr' = bit 7
+tcpEce' = bit 6
+tcpUrg' = bit 5
+tcpAck' = bit 4
+tcpPsh' = bit 3
+tcpRst' = bit 2
+tcpSyn' = bit 1
+tcpFin' = bit 0
+{-# INLINE tcpNs'  #-}
+{-# INLINE tcpCwr' #-}
+{-# INLINE tcpEce' #-}
+{-# INLINE tcpUrg' #-}
+{-# INLINE tcpAck' #-}
+{-# INLINE tcpPsh' #-}
+{-# INLINE tcpRst' #-}
+{-# INLINE tcpSyn' #-}
+{-# INLINE tcpFin' #-}
+
 tcpNs, tcpCwr, tcpEce, tcpUrg, tcpAck, tcpPsh, tcpRst, tcpSyn,
   tcpFin :: Lens' TcpHeader Bool
-tcpNs  = tcpFlags . bit 8
-tcpCwr = tcpFlags . bit 7
-tcpEce = tcpFlags . bit 6
-tcpUrg = tcpFlags . bit 5
-tcpAck = tcpFlags . bit 4
-tcpPsh = tcpFlags . bit 3
-tcpRst = tcpFlags . bit 2
-tcpSyn = tcpFlags . bit 1
-tcpFin = tcpFlags . bit 0
+tcpNs  = tcpFlags . tcpNs'
+tcpCwr = tcpFlags . tcpCwr'
+tcpEce = tcpFlags . tcpEce'
+tcpUrg = tcpFlags . tcpUrg'
+tcpAck = tcpFlags . tcpAck'
+tcpPsh = tcpFlags . tcpPsh'
+tcpRst = tcpFlags . tcpRst'
+tcpSyn = tcpFlags . tcpSyn'
+tcpFin = tcpFlags . tcpFin'
 {-# INLINE tcpNs  #-}
 {-# INLINE tcpCwr #-}
 {-# INLINE tcpEce #-}
@@ -181,6 +237,8 @@ tcpFin = tcpFlags . bit 0
 {-# INLINE tcpRst #-}
 {-# INLINE tcpSyn #-}
 {-# INLINE tcpFin #-}
+
+
 
 
 -- | The length of the fixed part of the TcpHeader, in 4-byte octets.
@@ -202,9 +260,9 @@ putTcpHeader TcpHeader { .. } =
      putTcpSeqNum tcpSeqNum
      putTcpAckNum tcpAckNum
      let (optLen,padding) = tcpOptionsSize tcpOptions_
-     putTcpControl (tcpFixedHeaderSize + optLen) tcpFlags_
+     putTcpControl (tcpFixedHeaderSize + optLen) (unTcpFlags tcpFlags_)
      putWord16be tcpWindow
-     putWord16be 0
+     putWord16be tcpChecksum
      putWord16be tcpUrgentPointer
      mapM_ putTcpOption tcpOptions_
      replicateM_ padding (putTcpOptionTag OptTagEndOfOptions)
@@ -218,8 +276,9 @@ getTcpHeader  = label "TcpHeader" $
      tcpAckNum     <- getTcpAckNum
 
      -- data offset and flags
-     tcpFlags_ <- getWord16be
-     let dataOff = fromIntegral ((tcpFlags_ `shiftR` 12) .&. 0xf)
+     tcpFlags_' <- TcpFlags <$> getWord16be
+     let tcpFlags_ = tcpFlags_' .&. (TcpFlags 0x1ff)
+     let dataOff = fromIntegral ((unTcpFlags tcpFlags_' `shiftR` 12) .&. 0xf)
 
      tcpWindow        <- getWord16be
      tcpChecksum      <- getWord16be
